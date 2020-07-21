@@ -15,6 +15,20 @@ find_package(catkin REQUIRED COMPONENTS
   naoqi_bridge_msgs
 )
 
+#Generate messages in the 'msg' folder
+ add_message_files(
+   FILES
+   Active.msg
+   Shutdown.msg
+   Target.msg
+ )
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
+)
+
 catkin_package(
  LIBRARIES
     ${PROJECT_NAME}
