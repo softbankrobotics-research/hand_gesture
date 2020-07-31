@@ -19,14 +19,14 @@
 # Author      : Arturo Cruz Maya
 # Departement : Software
 
-#import qi
+
 import os
 import sys
 
 CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
 if CV2_ROS in sys.path:
-	sys.path.remove(CV2_ROS)
-	sys.path.append(CV2_ROS)
+    sys.path.remove(CV2_ROS)
+    sys.path.append(CV2_ROS)
 
 import rospy
 import argparse
@@ -41,132 +41,128 @@ from geometry_msgs.msg import PoseStamped
 
 
 class tfTarget:
-	"""
+    """
     Class defining the target frame
     """
-	def __init__(self):
-		"""
-		Constructor
-		"""
+    def __init__(self):
+        """
+        Constructor
+        """
 
-		self.target_camera = PoseStamped()
-		self.target_camera.pose.position.x = 1
-		self.target_camera.pose.position.y = 0
-		self.target_camera.pose.position.z = 0
-		self.target_camera.pose.orientation.x = 0
-		self.target_camera.pose.orientation.y = 0
-		self.target_camera.pose.orientation.z = 0
-		self.target_camera.pose.orientation.w = 1
+        self.target_camera = PoseStamped()
+        self.target_camera.pose.position.x = 1
+        self.target_camera.pose.position.y = 0
+        self.target_camera.pose.position.z = 0
+        self.target_camera.pose.orientation.x = 0
+        self.target_camera.pose.orientation.y = 0
+        self.target_camera.pose.orientation.z = 0
+        self.target_camera.pose.orientation.w = 1
 
-		self.target_position = PoseStamped()
-		self.target_position.pose.position.x = 1
-		self.target_position.pose.position.y = 0
-		self.target_position.pose.position.z = 0
-		self.target_position.pose.orientation.x = 0
-		self.target_position.pose.orientation.y = 0
-		self.target_position.pose.orientation.z = 0
-		self.target_position.pose.orientation.w = 1
+        self.target_position = PoseStamped()
+        self.target_position.pose.position.x = 1
+        self.target_position.pose.position.y = 0
+        self.target_position.pose.position.z = 0
+        self.target_position.pose.orientation.x = 0
+        self.target_position.pose.orientation.y = 0
+        self.target_position.pose.orientation.z = 0
+        self.target_position.pose.orientation.w = 1
 
-		publisher_gesture = rospy.init_node("tf_target",
-         	anonymous=True,
+        publisher_gesture = rospy.init_node(
+            "tf_target",
+            anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
 
-		subscriber_target = rospy.Subscriber(
-		    "hand_detection/target_camera",
-         	PoseStamped,
+        subscriber_target = rospy.Subscriber(
+            "hand_detection/target_camera",
+            PoseStamped,
             self.callback_target_camera)
 
-		subscriber_target = rospy.Subscriber(
-		    "hand_gesture/target_local_position",
-         	PoseStamped,
+        subscriber_target = rospy.Subscriber(
+            "hand_gesture/target_local_position",
+            PoseStamped,
             self.callback_target_position)
 
-		self.pub_tf = rospy.Publisher(
-		     "/tf",
-			 tf2_msgs.msg.TFMessage,
-			 queue_size=1)
-		#self.br = tf.TransformBroadcaster()
+        self.pub_tf = rospy.Publisher(
+            "/tf",
+            tf2_msgs.msg.TFMessage,
+            queue_size=1)
 
-		self.pub_target = rospy.Publisher(
-		     "hand_gesture/target_local_position",
-			 PoseStamped,
-			 queue_size=1)
+        self.pub_target = rospy.Publisher(
+            "hand_gesture/target_local_position",
+            PoseStamped,
+            queue_size=1)
 
-		self.tf_listener = tf.TransformListener()
+        self.tf_listener = tf.TransformListener()
 
+    def callback_target_position(self, target_position):
+        """
+        Get the target position PointStamped message
+        """
+        self.target_position = target_position
 
-	def callback_target_position(self, target_position):
-		"""
-		Get the target position PointStamped message
-		"""
-		self.target_position = target_position
+    def callback_target_camera(self, target_camera):
+        """
+        Get the target from the camera PoV PointStamped message
+        """
+        self.target_camera = target_camera
+        # Transform the target frame to local reference
+        try:
+            (target, _) = self.tf_listener.lookupTransform(
+                "odom",
+                "target_camera",
+                rospy.Time())
+            self.target_position = PoseStamped()
+            self.target_position.header.frame_id = 'target_position'
+            self.target_position.header.stamp = rospy.Time.now()
+            self.target_position.pose.position.x = target[0]
+            self.target_position.pose.position.y = target[1]
+            self.target_position.pose.position.z = target[2]     
+        except (tf.LookupException,
+                tf.ConnectivityException,
+                tf.ExtrapolationException):
+            pass
 
-	def callback_target_camera(self, target_camera):
-		"""
-		Get the target from the camera PoV PointStamped message
-		"""
-		self.target_camera = target_camera
-		# Transform the target frame to local reference
-		#(target, _) = self.tfBuffer.lookup_transform(
-		try:
-			(target, _) = self.tf_listener.lookupTransform(
-		       "odom",
-			   "target_camera",
-			    rospy.Time())
-			# Publish the target_local_position
-			self.target_position = PoseStamped()
-			self.target_position.header.frame_id = 'target_position'
-			self.target_position.header.stamp = rospy.Time.now()
-			self.target_position.pose.position.x = target[0]
-			self.target_position.pose.position.y = target[1]
-			self.target_position.pose.position.z = target[2]
-			#self.pub_target.publish(self.target_position)
-		except (tf.LookupException,
-		        tf.ConnectivityException,
-				tf.ExtrapolationException):
-			pass
+    def publish_frame(self, frame_head, frame_child, frame):
+        t = geometry_msgs.msg.TransformStamped()
+        t.header.frame_id = frame_head
+        t.header.stamp = rospy.Time.now()
+        t.child_frame_id = frame_child
+        t.transform.translation.x = \
+            frame.pose.position.x
+        t.transform.translation.y = \
+            frame.pose.position.y
+        t.transform.translation.z = \
+            frame.pose.position.z
+        t.transform.rotation.x = 0
+        t.transform.rotation.y = 0
+        t.transform.rotation.z = 0
+        t.transform.rotation.w = 1
 
-	def publish_frame(self, frame_head, frame_child, frame):
-		t = geometry_msgs.msg.TransformStamped()
-		t.header.frame_id = frame_head
-		t.header.stamp = rospy.Time.now()
-		t.child_frame_id = frame_child
-		t.transform.translation.x = \
-		    frame.pose.position.x
-		t.transform.translation.y = \
-		    frame.pose.position.y
-		t.transform.translation.z = \
-		    frame.pose.position.z
-		t.transform.rotation.x = 0
-		t.transform.rotation.y = 0
-		t.transform.rotation.z = 0
-		t.transform.rotation.w = 1
+        tfm = tf2_msgs.msg.TFMessage([t])
+        self.pub_tf.publish(tfm)
 
-		tfm = tf2_msgs.msg.TFMessage([t])
-		self.pub_tf.publish(tfm)
+    def start(self):
+        """
+        Transform frames to local reference (odom)
+        publish PoseStamped msgs of the head, hand and target
+        """
+        self.publish_frame(
+            "RealSense_optical_frame",
+            "target_camera",
+            self.target_camera)
+        self.publish_frame(
+            "odom",
+            "target_position",
+            self.target_position)
 
-	def start(self):
-		"""
-		Transform frames to local reference (odom)
-		publish PoseStamped msgs of the head, hand and target
-		"""
-		self.publish_frame("RealSense_optical_frame",
-		                   "target_camera",
-						   self.target_camera)
-		self.publish_frame("odom",
-		                   "target_position",
-						   self.target_position)
-		#print(self.target_position)
 
 if __name__ == '__main__':
-	tfTarget = tfTarget()
-	try:
-		rate = rospy.Rate(30.0)
-		i = 0
-		while not rospy.is_shutdown():
-			i=i+1
-			tfTarget.start()
-			rate.sleep()
-	except KeyboardInterrupt:
-		pass
+    tfTarget = tfTarget()
+    try:
+        rate = rospy.Rate(30.0)
+        while not rospy.is_shutdown():
+            tfTarget.start()
+            rate.sleep()
+    except KeyboardInterrupt:
+        pass
