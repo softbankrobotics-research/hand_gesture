@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.5
 # coding: utf-8
 
-# Copyright 2020 SoftBank Robotics
+# Copyright 2020 SoftBank Robotics Europe
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,21 +19,19 @@
 # Author      : Arturo Cruz Maya
 # Departement : Software
 
-#import qi
+
 import os
 import sys
 
 CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
 if CV2_ROS in sys.path:
-	sys.path.remove(CV2_ROS)
-	sys.path.append(CV2_ROS)
+    sys.path.remove(CV2_ROS)
+    sys.path.append(CV2_ROS)
 
 import rospy
 import argparse
 
 import tf
-#import tf2_ros
-#import tf2_msgs.msg
 import geometry_msgs.msg
 import time
 
@@ -41,123 +39,119 @@ from geometry_msgs.msg import PoseStamped
 
 
 class tfHandGesture:
-	"""
-    Class for transforming the frames of the hand, head and target
-	to a local reference (odom) in order to perform the hand gesture
     """
-	def __init__(self):
-		"""
-		Constructor
-		"""
-		publisher_gesture = rospy.init_node("tf_hand_gesture",
-         	anonymous=True,
+    Class for transforming the frames of the hand, head and target
+    to a local reference (odom) in order to perform the hand gesture
+    """
+    def __init__(self):
+        """
+        Constructor
+        """
+        publisher_gesture = rospy.init_node(
+            "tf_hand_gesture",
+            anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
 
-		self.pub_target = rospy.Publisher(
-		     "hand_gesture/target_local_position",
-			 PoseStamped,
-			 queue_size=1)
+        self.pub_target = rospy.Publisher(
+            "hand_gesture/target_local_position",
+            PoseStamped,
+            queue_size=1)
 
-		self.pub_hand = rospy.Publisher(
-		     "hand_gesture/hand_local_position",
-			 PoseStamped,
-			 queue_size=1)
+        self.pub_hand = rospy.Publisher(
+            "hand_gesture/hand_local_position",
+            PoseStamped,
+            queue_size=1)
 
-		self.pub_head = rospy.Publisher(
-		     "hand_gesture/head_local_position",
-			 PoseStamped,
-			 queue_size=1)
+        self.pub_head = rospy.Publisher(
+            "hand_gesture/head_local_position",
+            PoseStamped,
+            queue_size=1)
 
-		#self.tfBuffer = tf2_ros.Buffer()
-		#self.listener = tf2_ros.TransformListener(self.tfBuffer)
-		self.listener1 = tf.TransformListener()
+        self.listener1 = tf.TransformListener()
 
-	def start(self):
-		"""
-		Transform frames to local reference (odom)
-		publish PoseStamped msgs of the head, hand and target
-		"""
+    def start(self):
+        """
+        Transform frames to local reference (odom)
+        publish PoseStamped msgs of the head, hand and target
+        """
 
-		# Transform the target frame to local reference
-		#(target, _) = self.tfBuffer.lookup_transform(
+        # Transform the target frame to local reference
+        try:
+            (target, _) = self.listener1.lookupTransform(
+                "odom",
+                "target_position",
+                rospy.Time())
 
-		try:
-			(target, _) = self.listener1.lookupTransform(
-		       "odom",
-			   "target_position",
-			    rospy.Time())
-			# Publish the target_local_position
-			target_local_position = PoseStamped()
-			# print(target)
-			#target_local_position.header.frame_id = 'target_position'
-			target_local_position.header.stamp = rospy.Time.now()
-			target_local_position.pose.position.x = target[0]
-			target_local_position.pose.position.y = target[1]
-			target_local_position.pose.position.z = target[2]
-			self.pub_target.publish(target_local_position)
-		except (tf.LookupException,
-		        tf.ConnectivityException,
-				tf.ExtrapolationException):
-			pass
+            # Publish the target_local_position
+            target_local_position = PoseStamped()
+            # target_local_position.header.frame_id = 'target_position'
+            target_local_position.header.stamp = rospy.Time.now()
+            target_local_position.pose.position.x = target[0]
+            target_local_position.pose.position.y = target[1]
+            target_local_position.pose.position.z = target[2]
+            self.pub_target.publish(target_local_position)
+
+        except(tf.LookupException,
+               tf.ConnectivityException,
+               tf.ExtrapolationException):
+            pass
 
         # Transform the hand frame to local reference
-		#(hand, _) = self.tfBuffer.lookup_transform(
-		try:
-			(hand, _) = self.listener1.lookupTransform(
-			    "odom",
-				"r_gripper",
-				rospy.Time())
+        try:
+            (hand, _) = self.listener1.lookupTransform(
+                "odom",
+                "r_gripper",
+                rospy.Time())
 
-			# Publish the hand_local_position
-			hand_local_position = PoseStamped()
-			#hand_local_position.header.frame_id = 'hand_local_position'
-			hand_local_position.header.stamp = rospy.Time.now()
+            # Publish the hand_local_position
+            hand_local_position = PoseStamped()
+            # hand_local_position.header.frame_id = 'hand_local_position'
+            hand_local_position.header.stamp = rospy.Time.now()
 
-			hand_local_position.pose.position.x = hand[0]
-			hand_local_position.pose.position.y = hand[1]
-			hand_local_position.pose.position.z = hand[2]
-			self.pub_hand.publish(hand_local_position)
-		except (tf.LookupException,
-		        tf.ConnectivityException,
-				tf.ExtrapolationException):
-			pass
+            hand_local_position.pose.position.x = hand[0]
+            hand_local_position.pose.position.y = hand[1]
+            hand_local_position.pose.position.z = hand[2]
+            self.pub_hand.publish(hand_local_position)
+
+        except (tf.LookupException,
+                tf.ConnectivityException,
+                tf.ExtrapolationException):
+            pass
 
         # Transform the head frame to local reference
-		#(head, head_rot) = self.tfBuffer.lookup_transform(
-		try:
-			(head, head_rot) = self.listener1.lookupTransform(
-			    "odom",
-    	        "RealSense_frame",
-    	        rospy.Time())
+        try:
+            (head, head_rot) = self.listener1.lookupTransform(
+                "odom",
+                "RealSense_frame",
+                rospy.Time())
 
-	        # Publish the head_local_position
-			head_local_position = PoseStamped()
-			#head_local_position.header.frame_id = 'hand_local_position'
-			head_local_position.header.stamp = rospy.Time.now()
+            # Publish the head_local_position
+            head_local_position = PoseStamped()
+            # head_local_position.header.frame_id = 'hand_local_position'
+            head_local_position.header.stamp = rospy.Time.now()
 
-			head_local_position.pose.position.x = head[0]
-			head_local_position.pose.position.y = head[1]
-			head_local_position.pose.position.z = head[2]
-			head_local_position.pose.orientation.x = head_rot[0]
-			head_local_position.pose.orientation.y = head_rot[1]
-			head_local_position.pose.orientation.z = head_rot[2]
-			head_local_position.pose.orientation.w = head_rot[3]
-			self.pub_head.publish(head_local_position)
-		except (tf.LookupException,
-		        tf.ConnectivityException,
-				tf.ExtrapolationException):
-			pass
+            head_local_position.pose.position.x = head[0]
+            head_local_position.pose.position.y = head[1]
+            head_local_position.pose.position.z = head[2]
+            head_local_position.pose.orientation.x = head_rot[0]
+            head_local_position.pose.orientation.y = head_rot[1]
+            head_local_position.pose.orientation.z = head_rot[2]
+            head_local_position.pose.orientation.w = head_rot[3]
+            self.pub_head.publish(head_local_position)
+
+        except (tf.LookupException,
+                tf.ConnectivityException,
+                tf.ExtrapolationException):
+            pass
+
 
 if __name__ == '__main__':
-	tfHandGesture = tfHandGesture()
-    #handGesture.start()
-	try:
-		rate = rospy.Rate(30.0)
-		while not rospy.is_shutdown():
-			#rospy.sleep(0.5)
-			#pass
-			tfHandGesture.start()
-			rate.sleep()
-	except KeyboardInterrupt:
-		pass
+    tfHandGesture = tfHandGesture()
+    try:
+        rate = rospy.Rate(30.0)
+        while not rospy.is_shutdown():
+            tfHandGesture.start()
+            rate.sleep()
+    except KeyboardInterrupt:
+        pass
