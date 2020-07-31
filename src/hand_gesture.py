@@ -79,12 +79,12 @@ class HandGesture:
 
         # Limits for the joint angles
         self.kinematic_chain = {
-            "HipPitch":       [-0.4,  0.2],  # real limits [-1.0385,  1.0385],
+            "HipPitch":       [-0.4,  0.05],  # real limits [-1.0385,  1.0385],
             "RShoulderPitch": [-2.0857,  2.0857],
             "RShoulderRoll":  [-1.5620, -0.0087],
             "RElbowRoll":     [0.0087,  1.5620],
             "HeadYaw":        [-2.0857,  2.0857],
-            "HeadPitch":      [-0.7068, 0.4451]
+            "HeadPitch":      [-0.7068, 0.6370]
             }
 
         self.joint_names = ["HipPitch",
@@ -144,9 +144,9 @@ class HandGesture:
         """
         Load a pre-trained PPO2 model on stable_baselines
         """
-        # file = "ppo2_hand_berserk_wozniak" # hand only
-        # file = "ppo2_hand_condescending_khorana" #hand only
-        file = "ppo2_hand_determined_borg"
+        #file = "ppo2_hand_berserk_wozniak" # hand only
+        #file = "ppo2_hand_condescending_khorana" #
+        file = "ppo2_hand_tender_carson_2"
         path = "../models/"+file
         self.model = PPO2.load(path)
 
@@ -196,18 +196,6 @@ class HandGesture:
             print("Shutdown")
             # do something
 
-    def setVelocities(self, angles, normalized_velocities):
-        """
-        Sets velocities on the robot joints
-        """
-        for angle, velocity in zip(angles, normalized_velocities):
-            # Unnormalize the velocity
-            if angle == "HeadPitch" or angle == "HeadYaw":
-                velocity *= 0.7
-            else:
-                velocity *= 1.0
-            # self.motion.changeAngles(angle, 0.1, velocity)
-
     def normalize_with_bounds(self, values, range_min, range_max,
                               bound_min, bound_max):
         """
@@ -236,6 +224,7 @@ class HandGesture:
         target_pos = np.array([self.target_local_position.pose.position.x,
                                self.target_local_position.pose.position.y,
                                self.target_local_position.pose.position.z])
+
         # Get position of the hand  of Pepper  in the local frame
         hand_pose = np.array([self.hand_local_position.pose.position.x,
                               self.hand_local_position.pose.position.y,
@@ -263,34 +252,36 @@ class HandGesture:
 
         vec_head_hand = np.array(target_pos) - np.array(head_pose)
         unit_vec_head_hand = vec_head_hand / head_hand_norm
+        print(unit_vec_head_hand)
 
-        rot_obj = R.from_quat([head_rot[2],
+        rot_obj = R.from_quat([head_rot[0],
                                head_rot[1],
-                               head_rot[0],
+                               head_rot[2],
                                head_rot[3]])
 
         # rot_vec = rot_obj.as_rotvec()
-        rot_vec_ = rot_obj.apply([0, 0, 1])
-        # rot_vec_ = np.array([rot_vec[0],rot_vec[1],rot_vec[2]])
-        head_norm = np.linalg.norm(rot_vec_)
-        unit_vec_head = (rot_vec_ / head_norm)
+        rot_vec = rot_obj.apply([1, 0, 0])
+        #rot_vec_ = np.array([rot_vec[2],rot_vec[0],-rot_vec[1]])
+        head_norm = np.linalg.norm(rot_vec)
+        unit_vec_head = (rot_vec / head_norm)
         unit_vec_head = np.array([unit_vec_head[0],
-                                  -unit_vec_head[1],
-                                  -unit_vec_head[2]])
+                                  unit_vec_head[1],
+                                  unit_vec_head[2]])
+        print(unit_vec_head)
 
         # Compute de normal distance between both orientations
         orientations_norm = np.linalg.norm(
-                np.array(unit_vec_head_hand) - unit_vec_head
-                )
+                np.array(unit_vec_head_hand) - unit_vec_head)
 
         # Fill and return the observation
         hand_poses = [pose for pose in hand_pose]
         norm_hand_poses = self.normalize_with_bounds(hand_poses,
-                                                     -1, 1, -0.5, 1.3)
+                                                     -1, 1, -1, 1)
 
         hand_poses_bis = [pose_bis for pose_bis in target_pos]
         norm_hand_poses_bis = self.normalize_with_bounds(hand_poses_bis,
-                                                         -1, 1, -0.5, 1.3)
+                                                         -1, 1, -1, 1)
+
         norm_angles = list()
         name_angles = list()
         index_joint = 0
@@ -299,8 +290,12 @@ class HandGesture:
             index_joints = 0
             for joints in self.joint_states.name:
                 if joint == joints:
-                    bound_min = self.kinematic_chain[joint][0]
-                    bound_max = self.kinematic_chain[joint][1]
+                    if joint == "HipPitch":
+                        bound_min = -0.4
+                        bound_max = 0.05
+                    else:
+                        bound_min = self.kinematic_chain[joint][0]
+                        bound_max = self.kinematic_chain[joint][1]
                     angle = [self.joint_states.position[index_joints]]
                     self.angles.append(
                         self.joint_states.position[index_joints])
@@ -314,7 +309,7 @@ class HandGesture:
 
         obs = [n for n in norm_hand_poses] +\
               [a for a in norm_angles] +\
-              [n for n in norm_hand_poses_bis] +\
+              [n for n in norm_hand_poses_bis]+\
               [e for e in unit_vec_head_hand] +\
               [e for e in unit_vec_head]
         return obs
@@ -336,19 +331,25 @@ class HandGesture:
         for action in self.action:
             if action > 0:
                 speed = action * 0.05
-                angles = 0.08
+                angles = 0.1
             elif action < 0:
                 speed = action * -0.05
-                angles = -0.08
+                angles = -0.1
             else:
                 angles = 0
                 speed = 0
 
             # Limit the angle of the HipPitch joint
             if self.joint_names[i] == "HipPitch":
-                if(self.angles[i] < -0.40 or self.angles[i] > 0.2):
+                if(self.angles[i] < -0.39 or self.angles[i] > 0.04):
                     angles = 0
                     speed = 0
+            elif (self.joint_names[i] == "HeadYaw" or
+                  self.joint_names[i] == "HeadPitch"):
+                angles  = angles * 0.2
+                speed = speed * 0.5
+
+
             self.joint_angles.joint_names = [self.joint_names[i]]
             self.joint_angles.joint_angles = [angles]
             self.joint_angles.speed = speed

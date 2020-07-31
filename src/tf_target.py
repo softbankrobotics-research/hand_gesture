@@ -167,7 +167,6 @@ if __name__ == '__main__':
 		while not rospy.is_shutdown():
 			i=i+1
 			tfTarget.start()
-			print(i)
 			rate.sleep()
 	except KeyboardInterrupt:
 		pass

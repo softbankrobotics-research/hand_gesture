@@ -89,7 +89,7 @@ class tfHandGesture:
 			    rospy.Time())
 			# Publish the target_local_position
 			target_local_position = PoseStamped()
-			print(target)
+			# print(target)
 			#target_local_position.header.frame_id = 'target_position'
 			target_local_position.header.stamp = rospy.Time.now()
 			target_local_position.pose.position.x = target[0]
@@ -142,7 +142,7 @@ class tfHandGesture:
 			head_local_position.pose.orientation.x = head_rot[0]
 			head_local_position.pose.orientation.y = head_rot[1]
 			head_local_position.pose.orientation.z = head_rot[2]
-			head_local_position.pose.orientation.z = head_rot[3]
+			head_local_position.pose.orientation.w = head_rot[3]
 			self.pub_head.publish(head_local_position)
 		except (tf.LookupException,
 		        tf.ConnectivityException,
