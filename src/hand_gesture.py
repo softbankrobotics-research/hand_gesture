@@ -102,45 +102,45 @@ class HandGesture:
             return
 
         # Load the pre-trained model
-        self.loadModel()
+        self.load_model()
 
         # Subscribers
         subscriber_target = rospy.Subscriber(
             "hand_gesture/target_local_position",
             PoseStamped,
-            self.callbackTarget)
+            self.callback_target)
 
         subscriber_hand = rospy.Subscriber(
             "hand_gesture/hand_local_position",
             PoseStamped,
-            self.callbackHand)
+            self.callback_hand)
 
         subscriber_head = rospy.Subscriber(
             "hand_gesture/head_local_position",
             PoseStamped,
-            self.callbackHead)
+            self.callback_head)
 
         subscriber_head = rospy.Subscriber(
             "joint_states",
             JointState,
-            self.callbackJointStates)
+            self.callback_joint_states)
 
         subscriber_active = rospy.Subscriber(
             "hand_gesture/active",
             Bool,
-            self.callbackActive)
+            self.callback_active)
 
         subscriber_shutdown = rospy.Subscriber(
             "hand_gesture/shutdown",
             Bool,
-            self.callbackShutdown)
+            self.callback_shutdown)
 
         self.pub_joints = rospy.Publisher(
              "joint_angles",
              JointAnglesWithSpeed,
              queue_size=1)
 
-    def loadModel(self):
+    def load_model(self):
         """
         Load a pre-trained PPO2 model on stable_baselines
         """
@@ -150,31 +150,31 @@ class HandGesture:
         path = "../models/"+file
         self.model = PPO2.load(path)
 
-    def callbackJointStates(self, joint_states):
+    def callback_joint_states(self, joint_states):
         """
         Get the angles of the joints of the robot
         """
         self.joint_states = joint_states
 
-    def callbackTarget(self, target_local_position):
+    def callback_target(self, target_local_position):
         """
         Get the position of the target in the world reference
         """
         self.target_local_position = target_local_position
 
-    def callbackHand(self, hand_local_position):
+    def callback_hand(self, hand_local_position):
         """
         Get the position of the hand of the robot in the world reference
         """
         self.hand_local_position = hand_local_position
 
-    def callbackHead(self, head_local_position):
+    def callback_head(self, head_local_position):
         """
         Get the position of the head of the robot in the world references
         """
         self.head_local_position = head_local_position
 
-    def callbackActive(self, active):
+    def callback_active(self, active):
         """
         Activates or deactivates the gesture motion
         """
@@ -187,7 +187,7 @@ class HandGesture:
             self.active = False
             print("Gesture module OFF")
 
-    def callbackShutdown(self, data):
+    def callback_shutdown(self, data):
         """
         Shutdown the node
         """
@@ -209,7 +209,7 @@ class HandGesture:
                          for x in values_std]
         return values_scaled
 
-    def getObservation(self):
+    def get_observation(self):
         """
         Returns the observation
 
@@ -314,7 +314,7 @@ class HandGesture:
               [e for e in unit_vec_head]
         return obs
 
-    def setAngles(self):
+    def set_angles(self):
         """
         Set the speed and angle of the joints in relative position
         and send them to the naoqi driver
@@ -365,9 +365,9 @@ class HandGesture:
         """
 
         if self.active:
-            obs = self.getObservation()
+            obs = self.get_observation()
             self.action, _states = self.model.predict(obs, deterministic=True)
-            self.setAngles()
+            self.set_angles()
 
 
 if __name__ == '__main__':
