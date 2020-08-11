@@ -117,13 +117,17 @@ class tfTarget:
             self.target_position.header.stamp = rospy.Time.now()
             self.target_position.pose.position.x = target[0]
             self.target_position.pose.position.y = target[1]
-            self.target_position.pose.position.z = target[2]     
+            self.target_position.pose.position.z = target[2]
         except (tf.LookupException,
                 tf.ConnectivityException,
                 tf.ExtrapolationException):
             pass
 
     def publish_frame(self, frame_head, frame_child, frame):
+        """
+        Get the position and orientation of a frame specified as frame_child
+        with respect to other frame specified as frame_head
+        """
         t = geometry_msgs.msg.TransformStamped()
         t.header.frame_id = frame_head
         t.header.stamp = rospy.Time.now()
@@ -140,6 +144,8 @@ class tfTarget:
         t.transform.rotation.w = 1
 
         tfm = tf2_msgs.msg.TFMessage([t])
+        if frame_child == "target_position":
+           print(tfm)
         self.pub_tf.publish(tfm)
 
     def start(self):
@@ -160,7 +166,7 @@ class tfTarget:
 if __name__ == '__main__':
     tfTarget = tfTarget()
     try:
-        rate = rospy.Rate(30.0)
+        rate = rospy.Rate(50.0)
         while not rospy.is_shutdown():
             tfTarget.start()
             rate.sleep()

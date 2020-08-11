@@ -90,6 +90,7 @@ class tfHandGesture:
             target_local_position.pose.position.x = target[0]
             target_local_position.pose.position.y = target[1]
             target_local_position.pose.position.z = target[2]
+            print(target_local_position)
             self.pub_target.publish(target_local_position)
 
         except(tf.LookupException,
@@ -149,7 +150,7 @@ class tfHandGesture:
 if __name__ == '__main__':
     tfHandGesture = tfHandGesture()
     try:
-        rate = rospy.Rate(30.0)
+        rate = rospy.Rate(50.0)
         while not rospy.is_shutdown():
             tfHandGesture.start()
             rate.sleep()
