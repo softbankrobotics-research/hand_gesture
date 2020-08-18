@@ -47,6 +47,7 @@ class tfHandGesture:
         """
         Constructor
         """
+
         publisher_gesture = rospy.init_node(
             "tf_hand_gesture",
             anonymous=True,
@@ -90,8 +91,10 @@ class tfHandGesture:
             target_local_position.pose.position.x = target[0]
             target_local_position.pose.position.y = target[1]
             target_local_position.pose.position.z = target[2]
-            print(target_local_position)
-            self.pub_target.publish(target_local_position)
+            if ((target[0] > 0.3 and target[0] < 1.0) and
+                (target[1] > -0.1 and target[0] < 0.8) and
+                (target[2] > 0.6 and target[2] < 1.2)):
+                self.pub_target.publish(target_local_position)
 
         except(tf.LookupException,
                tf.ConnectivityException,
