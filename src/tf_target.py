@@ -88,11 +88,6 @@ class tfTarget:
             tf2_msgs.msg.TFMessage,
             queue_size=1)
 
-        self.pub_target = rospy.Publisher(
-            "hand_gesture/target_local_position",
-            PoseStamped,
-            queue_size=1)
-
         self.tf_listener = tf.TransformListener()
 
     def callback_target_position(self, target_position):
