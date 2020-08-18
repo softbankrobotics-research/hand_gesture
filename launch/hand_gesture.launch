@@ -1,0 +1,11 @@
+<launch>
+
+    <arg name="path_file" default="$(find hand_gesture)/models/ppo2_hand_sharp_kare_3" />
+
+    <node pkg="hand_gesture" type="tf_hand_gesture.py" name="tf_hand_gesture"/>
+    <node pkg="hand_gesture" type="tf_target.py" name="tf_target" />
+    <node pkg="hand_gesture" type="hand_gesture.py" name="hand_gesture" output="screen">
+        <param name="path_file" value="$(arg path_file)" />
+    </node>
+
+</launch>
