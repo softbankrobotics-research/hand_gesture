@@ -13,7 +13,10 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   naoqi_bridge_msgs
+  roslaunch
 )
+
+roslaunch_add_file_check(launch)
 
 #Generate messages in the 'msg' folder
  add_message_files(
