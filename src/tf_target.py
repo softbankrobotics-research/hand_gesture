@@ -38,6 +38,7 @@ import geometry_msgs.msg
 import time
 
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool
 
 
 class tfTarget:
@@ -48,30 +49,18 @@ class tfTarget:
         """
         Constructor
         """
-
-        self.target_camera = PoseStamped()
-        self.target_camera.pose.position.x = 1
-        self.target_camera.pose.position.y = 0
-        self.target_camera.pose.position.z = 0
-        self.target_camera.pose.orientation.x = 0
-        self.target_camera.pose.orientation.y = 0
-        self.target_camera.pose.orientation.z = 0
-        self.target_camera.pose.orientation.w = 1
-
-        self.target_position = PoseStamped()
-        self.target_position.pose.position.x = 1
-        self.target_position.pose.position.y = 0
-        self.target_position.pose.position.z = 0
-        self.target_position.pose.orientation.x = 0
-        self.target_position.pose.orientation.y = 0
-        self.target_position.pose.orientation.z = 0
-        self.target_position.pose.orientation.w = 1
+        self.init_targets()
 
         publisher_gesture = rospy.init_node(
             "tf_target",
             anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
+
+        subscriber_init_targets = rospy.Subscriber(
+            "hand_gesture/init_targets",
+            Bool,
+            self.callback_init_targets)
 
         subscriber_target = rospy.Subscriber(
             "hand_detection/target_camera",
@@ -90,6 +79,35 @@ class tfTarget:
 
         self.tf_listener = tf.TransformListener()
 
+    def init_targets(self):
+        self.target_camera = PoseStamped()
+        self.target_camera.pose.position.x = 1
+        self.target_camera.pose.position.y = 0
+        self.target_camera.pose.position.z = 0
+        self.target_camera.pose.orientation.x = 0
+        self.target_camera.pose.orientation.y = 0
+        self.target_camera.pose.orientation.z = 0
+        self.target_camera.pose.orientation.w = 1
+
+        self.target_position = PoseStamped()
+        self.target_position.pose.position.x = 1
+        self.target_position.pose.position.y = 0
+        self.target_position.pose.position.z = 0
+        self.target_position.pose.orientation.x = 0
+        self.target_position.pose.orientation.y = 0
+        self.target_position.pose.orientation.z = 0
+        self.target_position.pose.orientation.w = 1
+
+    def callback_init_targets(self, target_position):
+        """
+        Get the target position PointStamped message
+        """
+        self.init_targets()
+        self.publish_frame(
+            "base_link",
+            "target_position",
+            self.target_position)
+
     def callback_target_position(self, target_position):
         """
         Get the target position PointStamped message
@@ -104,7 +122,7 @@ class tfTarget:
         # Transform the target frame to local reference
         try:
             (target, _) = self.tf_listener.lookupTransform(
-                "odom",
+                "base_link",
                 "target_camera",
                 rospy.Time())
             self.target_position = PoseStamped()
@@ -153,7 +171,7 @@ class tfTarget:
             "target_camera",
             self.target_camera)
         self.publish_frame(
-            "odom",
+            "base_link",
             "target_position",
             self.target_position)
 
