@@ -49,6 +49,17 @@ class HandGesture:
     """
     Class for performing the hand gesture
     """
+    HIP_PITCH_MAX = 0.05
+    HIP_PITCH_MIN = -0.4
+    TARGET_MAX = 1.5
+    TARGET_MIN = -1.5
+    JOINTS_SPEED = 0.1
+    HEAD_SPEED = JOINTS_SPEED * 0.5
+    HIP_SPEED = JOINTS_SPEED * 0.5
+    JOINTS_ANGLE = 0.2
+    HEAD_ANGLE = JOINTS_ANGLE * 0.5
+    HIP_ANGLE = JOINTS_ANGLE * 0.5
+
     def __init__(self):
         """
         Constructor
@@ -61,7 +72,6 @@ class HandGesture:
                                             disable_signals=False,
                                             log_level=rospy.INFO)
 
-        self.robot_ip = "10.0.160.95"
         self.motion = None
         self.posture = None
         self.model = None
@@ -77,12 +87,15 @@ class HandGesture:
         self.head_local_position.pose.orientation.w = 1
         # Gesture status
         self.active = False
-        self.shoulder_angle = 0
+        self.gesture_started = False
         self.active_time = rospy.Time.now()
+        self.shoulder_angle = 0
+        self.head_angle = 0
 
         # Limits for the joint angles
         self.kinematic_chain = {
-            "HipPitch":       [-0.4,  0.05],  # real limits [-1.0385,  1.0385],
+            # real hip limits [-1.0385,  1.0385],
+            "HipPitch":       [self.HIP_PITCH_MIN,  self.HIP_PITCH_MAX],
             "RShoulderPitch": [-2.0857,  2.0857],
             "RShoulderRoll":  [-1.5620, -0.0087],
             "RElbowRoll":     [0.0087,  1.56207],
@@ -97,15 +110,18 @@ class HandGesture:
                             "HeadYaw",
                             "HeadPitch"]
 
-        try:
-            assert self.robot_ip is not None
-        except AssertionError:
-            self.logFatal("Cannot retreive the robot's IP, the state " +
-                          " the module won't be launched")
-            return
-
         # Load the pre-trained model
         self.load_model()
+
+        self.pub_init_targets = rospy.Publisher(
+             "hand_gesture/init_targets",
+             Bool,
+             queue_size=1)
+
+        self.pub_joints = rospy.Publisher(
+             "joint_angles",
+             JointAnglesWithSpeed,
+             queue_size=1)
 
         # Subscribers
         subscriber_target = rospy.Subscriber(
@@ -138,11 +154,6 @@ class HandGesture:
             Bool,
             self.callback_shutdown)
 
-        self.pub_joints = rospy.Publisher(
-             "joint_angles",
-             JointAnglesWithSpeed,
-             queue_size=1)
-
     def callback_joint_states(self, joint_states):
         """
         Get the angles of the joints of the robot
@@ -172,16 +183,16 @@ class HandGesture:
         Activates or deactivates the gesture motion
         """
         if active.data is True:
+            self.resetGesture()
+            self.set_head_pose()
+            rospy.sleep(1.5)
             if self.active is False:
                 print("Gesture Module ON")
-                self.set_head_pose()
-                rospy.sleep(1)
                 self.active = True
                 self.active_time = rospy.Time.now()
                 self.active_pose = True
         else:
-            self.active = False
-            print("Gesture module OFF")
+            self.resetGesture()
 
     def callback_shutdown(self, data):
         """
@@ -192,11 +203,20 @@ class HandGesture:
             print("Shutdown")
             # do something
 
+    def resetGesture(self):
+        self.active = False
+        self.gesture_started = False
+        self.target_local_position.pose.position.x = 1
+        self.target_local_position.pose.position.y = 0
+        self.target_local_position.pose.position.z = 0
+        self.pub_init_targets.publish(True)
+        self.set_initial_pose()
+        print("Gesture module OFF")
+
     def load_model(self):
         """
         Load a pre-trained PPO2 model on stable_baselines
         """
-        #file = "models/ppo2_hand_sharp_kare_3"
         self.model = PPO2.load(self.path_file)
 
     def set_initial_pose(self):
@@ -343,16 +363,16 @@ class HandGesture:
                             hand_pos,
                             -1,
                             1,
-                            -1.5,
-                            1.5)
+                            self.TARGET_MIN,
+                            self.TARGET_MAX)
 
         #hand_pos_bis = [pose_bis for pose_bis in target]
         norm_target = self.normalize_with_bounds(
                           target,
                           -1,
                           1,
-                          -1.5,
-                          1.5)
+                          self.TARGET_MIN,
+                          self.TARGET_MAX)
 
         norm_angles = list()
         name_angles = list()
@@ -363,8 +383,8 @@ class HandGesture:
             for joints in self.joint_states.name:
                 if joint == joints:
                     if joint == "HipPitch":
-                        bound_min = -0.4
-                        bound_max = 0.05
+                        bound_min = self.HIP_PITCH_MIN
+                        bound_max = self.HIP_PITCH_MAX
                     else:
                         bound_min = self.kinematic_chain[joint][0]
                         bound_max = self.kinematic_chain[joint][1]
@@ -372,6 +392,8 @@ class HandGesture:
 
                     if joint == "RShoulderPitch":
                         self.shoulder_angle = angle[0]
+                    if joint == "HeadYaw":
+                        self.head_angle = angle[0]
                     self.angles.append(
                         self.joint_states.position[index_joints])
                     norm_angle = self.normalize_with_bounds(
@@ -410,34 +432,28 @@ class HandGesture:
         # Adjust the speed of the joints
         for action in self.action:
             if action > 0:
-                speed = action * 0.1
-                angles = action * 0.2
+                speed = action * self.JOINTS_SPEED
+                angles = action * self.JOINTS_ANGLE
             elif action < 0:
-                speed = action * - 0.1
-                angles = action * 0.2
+                speed = action * - self.JOINTS_SPEED
+                angles = action * self.JOINTS_ANGLE
             else:
                 angles = 0
                 speed = 0
-            if (self.angles[i] < self.kinematic_chain[self.joint_names[i]][0]
-                or self.angles[i] > self.kinematic_chain[self.joint_names[i]][1]):
-                print("Limits! of:")
-                print(self.joint_names[i])
-
             # Limit the angle of the HipPitch joint
             if self.joint_names[i] == "HipPitch":
-                angles = angles * 0.3
+                speed = self.HIP_SPEED
+                angles = self.HIP_ANGLE
                 if angles > 0:
                     angles = 0
-                speed = 0.3
+                # Angles out of limits
                 if(self.angles[i] < -0.35 or self.angles[i] > 0.03):
-                    #print("Angles out of limits")
                     angles = angles * -1
-            elif self.joint_names[i] == "RElbowRoll":
-                angles = angles * 1
+            # Limit the angles of the Head joints
             elif (self.joint_names[i] == "HeadYaw" or
-                  self.joint_names[i] == "HeadPitch"):
-                angles = angles * 0.3
-                speed = speed * 0.3
+                self.joint_names[i] == "HeadPitch"):
+                speed = self.HEAD_SPEED
+                angles = self.HEAD_ANGLE
 
             self.joint_angles.joint_names = [self.joint_names[i]]
             self.joint_angles.joint_angles = [angles]
@@ -452,20 +468,29 @@ class HandGesture:
         Subscriber topic
             "hand_gesture/active"
         """
+        obs = self.get_observation()
         if self.active:
-            obs = self.get_observation()
-            self.action, _states = self.model.predict(obs, deterministic=False)
-            self.set_angles()
+            target = np.zeros(3)
+            target[0] = self.target_local_position.pose.position.x
+            target[1] = self.target_local_position.pose.position.y
+            target[2] = self.target_local_position.pose.position.z
+            if ((target[0] > 0.25 and target[0] < 0.9) and
+                (target[1] > -0.75 and target[1] < -0.1) and
+                (target[2] > 0.6 and target[2] < 1.5)):
+                 self.action, _states = self.model.predict(obs)
+                 self.set_angles()
+                 if self.gesture_started == False:
+                     self.active_time = rospy.Time.now()
+                     self.gesture_started = True
             time_now = rospy.Time.now()
-            if float(time_now.secs) - (self.active_time.secs) > 10:
-                if self.shoulder_angle < 0.7853: # 45 degrees
+            if float(time_now.secs) - (self.active_time.secs) > 7:
+                if (self.shoulder_angle < 0.7 or
+                    self.head_angle < -0.1):
                     self.set_initial_pose()
                     print("setting initial position")
                     rospy.sleep(1.0)
                 else:
-                    print("Gesture finished")
-                    self.active = False
-
+                    self.resetGesture()
 
 if __name__ == '__main__':
     handGesture = HandGesture()
