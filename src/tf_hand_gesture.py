@@ -36,6 +36,7 @@ import geometry_msgs.msg
 import time
 
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool
 
 
 class tfHandGesture:
@@ -47,12 +48,18 @@ class tfHandGesture:
         """
         Constructor
         """
+        self.activate_target = False
 
         publisher_gesture = rospy.init_node(
             "tf_hand_gesture",
             anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
+
+        self.pub_activate_gesture = rospy.Publisher(
+            "hand_gesture/active",
+            Bool,
+            queue_size=1)
 
         self.pub_target = rospy.Publisher(
             "hand_gesture/target_local_position",
@@ -69,7 +76,17 @@ class tfHandGesture:
             PoseStamped,
             queue_size=1)
 
+
         self.listener1 = tf.TransformListener()
+
+    def callback_activate_target(self, data):
+        """
+        Activates or deactivates the gesture motion
+        """
+        if data.data is True:
+            self.activate_target = True
+        else:
+            self.activate_target = False
 
     def start(self):
         """
@@ -80,20 +97,20 @@ class tfHandGesture:
         # Transform the target frame to local reference
         try:
             (target, _) = self.listener1.lookupTransform(
-                "odom",
+                "base_link",
                 "target_position",
                 rospy.Time())
 
             # Publish the target_local_position
-            target_local_position = PoseStamped()
-            # target_local_position.header.frame_id = 'target_position'
-            target_local_position.header.stamp = rospy.Time.now()
-            target_local_position.pose.position.x = target[0]
-            target_local_position.pose.position.y = target[1]
-            target_local_position.pose.position.z = target[2]
-            if ((target[0] > 0.3 and target[0] < 1.0) and
-                (target[1] > -0.1 and target[0] < 0.8) and
-                (target[2] > 0.6 and target[2] < 1.2)):
+            if ((target[0] > 0.25 and target[0] < 0.9) and
+                (target[1] > -0.75 and target[1] < -0.1) and
+                (target[2] > 0.6 and target[2] < 1.5)):
+                target_local_position = PoseStamped()
+                # target_local_position.header.frame_id = 'target_position'
+                target_local_position.header.stamp = rospy.Time.now()
+                target_local_position.pose.position.x = target[0]
+                target_local_position.pose.position.y = target[1]
+                target_local_position.pose.position.z = target[2]
                 self.pub_target.publish(target_local_position)
 
         except(tf.LookupException,
@@ -104,7 +121,7 @@ class tfHandGesture:
         # Transform the hand frame to local reference
         try:
             (hand, _) = self.listener1.lookupTransform(
-                "odom",
+                "base_link",
                 "r_gripper",
                 rospy.Time())
 
@@ -126,7 +143,7 @@ class tfHandGesture:
         # Transform the head frame to local reference
         try:
             (head, head_rot) = self.listener1.lookupTransform(
-                "odom",
+                "base_link",
                 "RealSense_frame",
                 rospy.Time())
 
