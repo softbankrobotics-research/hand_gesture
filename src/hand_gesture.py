@@ -21,27 +21,24 @@
 
 import os
 import sys
-
-CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
-if CV2_ROS in sys.path:
-    sys.path.remove(CV2_ROS)
-    sys.path.append(CV2_ROS)
-
-import rospy
 import argparse
+import numpy as np
 import gym
 import pybullet
 import pybullet_data
-import numpy as np
-import time
+import rospy
+import std_msgs.msg
 
 from geometry_msgs.msg import PoseStamped
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
-import std_msgs.msg
 
+CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
+if CV2_ROS in sys.path:
+    sys.path.remove(CV2_ROS)
+    sys.path.append(CV2_ROS)
 from stable_baselines import PPO2
 
 
@@ -49,16 +46,27 @@ class HandGesture:
     """
     Class for performing the hand gesture
     """
-    HIP_PITCH_MAX = 0.05
-    HIP_PITCH_MIN = -0.4
-    TARGET_MAX = 1.5
-    TARGET_MIN = -1.5
-    JOINTS_SPEED = 0.1
-    HEAD_SPEED = JOINTS_SPEED * 0.5
-    HIP_SPEED = JOINTS_SPEED * 0.5
-    JOINTS_ANGLE = 0.2
-    HEAD_ANGLE = JOINTS_ANGLE * 0.5
-    HIP_ANGLE = JOINTS_ANGLE * 0.5
+    GESTURE_TIME = 7  # in seconds
+    HIP_PITCH_MAX = 0.05  # in rads
+    HIP_PITCH_MIN = -0.4  # in rads
+    MODEL_TARGET_MAX = 1.5  # in meters
+    MODEL_TARGET_MIN = -1.5  # in meters
+    JOINTS_SPEED = 0.1  # % of maximum speed
+    HEAD_SPEED = 0.5  # % of joints speed
+    HIP_SPEED = 0.5  # % of joints speed
+    JOINTS_ANGLE = 0.2  # rads
+    HEAD_ANGLE = 0.5  # % of the joints angles
+    HIP_ANGLE = 0.5  # % of the joints angles
+    TARGET_MIN_X = 0.30  # in meters
+    TARGET_MAX_X = 0.80  # in meters
+    TARGET_MIN_Y = -0.70  # in meters
+    TARGET_MAX_Y = -0.10  # in meters
+    TARGET_MIN_Z = 0.6  # in meters
+    TARGET_MAX_Z = 1.4  # in meters
+    RESET_POSITION_HEAD = -0.1  # in rads
+    RESET_POSITION_SHOULDER = 0.7  # in rads
+    NORMALIZATION_MIN = -1
+    NORMALIZATION_MAX = 1
 
     def __init__(self):
         """
@@ -67,13 +75,12 @@ class HandGesture:
 
         self.path_file = rospy.get_param('hand_gesture/path_file')
 
-        publisher_gesture = rospy.init_node("hand_gesture",
-                                            anonymous=True,
-                                            disable_signals=False,
-                                            log_level=rospy.INFO)
+        rospy.init_node(
+            "hand_gesture",
+            anonymous=True,
+            disable_signals=False,
+            log_level=rospy.INFO)
 
-        self.motion = None
-        self.posture = None
         self.model = None
         self.joint_states = JointState()
         self.joint_angles = JointAnglesWithSpeed()
@@ -103,12 +110,13 @@ class HandGesture:
             "HeadPitch":      [-0.7068, 0.6370]
             }
 
-        self.joint_names = ["HipPitch",
-                            "RShoulderPitch",
-                            "RShoulderRoll",
-                            "RElbowRoll",
-                            "HeadYaw",
-                            "HeadPitch"]
+        self.joint_names = [
+            "HipPitch",
+            "RShoulderPitch",
+            "RShoulderRoll",
+            "RElbowRoll",
+            "HeadYaw",
+            "HeadPitch"]
 
         # Load the pre-trained model
         self.load_model()
@@ -124,32 +132,32 @@ class HandGesture:
              queue_size=1)
 
         # Subscribers
-        subscriber_target = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/target_local_position",
             PoseStamped,
             self.callback_target)
 
-        subscriber_hand = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/hand_local_position",
             PoseStamped,
             self.callback_hand)
 
-        subscriber_head = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/head_local_position",
             PoseStamped,
             self.callback_head)
 
-        subscriber_head = rospy.Subscriber(
+        rospy.Subscriber(
             "joint_states",
             JointState,
             self.callback_joint_states)
 
-        subscriber_active = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/active",
             Bool,
             self.callback_active)
 
-        subscriber_shutdown = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/shutdown",
             Bool,
             self.callback_shutdown)
@@ -264,7 +272,7 @@ class HandGesture:
         joint_angles = JointAnglesWithSpeed()
         joint_angles.joint_names = body_joint_names
         joint_angles.joint_angles = body_joint_values
-        joint_angles.speed = 0.1
+        joint_angles.speed = self.JOINTS_SPEED
         joint_angles.relative = 0
         self.pub_joints.publish(joint_angles)
 
@@ -276,7 +284,7 @@ class HandGesture:
         joint_angles = JointAnglesWithSpeed()
         joint_angles.joint_names = ["HeadYaw", "HeadPitch"]
         joint_angles.joint_angles = [-0.4, 0.5]
-        joint_angles.speed = 0.1
+        joint_angles.speed = self.JOINTS_SPEED
         joint_angles.relative = 0
         self.pub_joints.publish(joint_angles)
 
@@ -305,74 +313,64 @@ class HandGesture:
             [unit vec head]
         """
         # Get position of the target position in the local reference
-        target = np.array([self.target_local_position.pose.position.x,
-                               self.target_local_position.pose.position.y,
-                               self.target_local_position.pose.position.z])
+        target = np.array([
+            self.target_local_position.pose.position.x,
+            self.target_local_position.pose.position.y,
+            self.target_local_position.pose.position.z])
         # print(target)
 
         # Get position of the hand  of Pepper  in the local frame
-        hand_pos = np.array([self.hand_local_position.pose.position.x,
-                              self.hand_local_position.pose.position.y,
-                              self.hand_local_position.pose.position.z])
+        hand_pos = np.array([
+            self.hand_local_position.pose.position.x,
+            self.hand_local_position.pose.position.y,
+            self.hand_local_position.pose.position.z])
 
         # Get position and orientation of the hand  of Pepper
         # in the local frame
-        head_pos = np.array([self.head_local_position.pose.position.x,
-                              self.head_local_position.pose.position.y,
-                              self.head_local_position.pose.position.z])
+        head_pos = np.array([
+            self.head_local_position.pose.position.x,
+            self.head_local_position.pose.position.y,
+            self.head_local_position.pose.position.z])
 
-        head_rot = np.array([self.head_local_position.pose.orientation.x,
-                             self.head_local_position.pose.orientation.y,
-                             self.head_local_position.pose.orientation.z,
-                             self.head_local_position.pose.orientation.w])
+        head_rot = np.array([
+            self.head_local_position.pose.orientation.x,
+            self.head_local_position.pose.orientation.y,
+            self.head_local_position.pose.orientation.z,
+            self.head_local_position.pose.orientation.w])
 
-        # target_bis = target
-        # target_bis[1] = target_bis[1] - 0.05
         hands_norm = np.linalg.norm(hand_pos - target)
 
         # Get information about the head direction and hand
         # Head to Hand reward based on the direction of the head to the hand
-        head_target_norm = np.linalg.norm(np.array(head_pos)
-                                        - np.array(target))
+        head_target_norm = np.linalg.norm(
+            np.array(head_pos) - np.array(target))
 
         head_target_vec = np.array(target) - np.array(head_pos)
         head_target_unit_vec = head_target_vec / head_target_norm
-        # print(head_target_unit_vec)
 
-        rot_obj = R.from_quat([head_rot[0],
-                               head_rot[1],
-                               head_rot[2],
-                               head_rot[3]])
-
-        # head_rot_obj = rot_obj.as_rotvec()
+        rot_obj = R.from_quat(head_rot)
         head_rot_obj = rot_obj.apply([1, 0, 0])
-        #head_rot_obj_ = np.array([head_rot_obj[2],head_rot_obj[0],-head_rot_obj[1]])
         head_norm = np.linalg.norm(head_rot_obj)
-        head_unit_vec = (head_rot_obj / head_norm)
-        head_unit_vec = np.array([head_unit_vec[0],
-                                  head_unit_vec[1],
-                                  head_unit_vec[2]])
+        head_unit_vec = np.array((head_rot_obj / head_norm))
 
         # Compute de normal distance between both orientations
         orientations_norm = np.linalg.norm(
-                np.array(head_target_unit_vec) - head_unit_vec)
+            np.array(head_target_unit_vec) - head_unit_vec)
 
         # Fill and return the observation
-        #hand_pos = [pose for pose in hand_pos]
         norm_hand_pos = self.normalize_with_bounds(
-                            hand_pos,
-                            -1,
-                            1,
-                            self.TARGET_MIN,
-                            self.TARGET_MAX)
+            hand_pos,
+            self.NORMALIZATION_MIN,
+            self.NORMALIZATION_MAX,
+            self.MODEL_TARGET_MIN,
+            self.MODEL_TARGET_MAX)
 
-        #hand_pos_bis = [pose_bis for pose_bis in target]
         norm_target = self.normalize_with_bounds(
-                          target,
-                          -1,
-                          1,
-                          self.TARGET_MIN,
-                          self.TARGET_MAX)
+            target,
+            self.NORMALIZATION_MIN,
+            self.NORMALIZATION_MAX,
+            self.MODEL_TARGET_MIN,
+            self.MODEL_TARGET_MAX)
 
         norm_angles = list()
         name_angles = list()
@@ -382,26 +380,25 @@ class HandGesture:
             index_joints = 0
             for joints in self.joint_states.name:
                 if joint == joints:
+                    angle = [self.joint_states.position[index_joints]]
+                    self.angles.append(
+                        self.joint_states.position[index_joints])
+                    if joint == "RShoulderPitch":
+                        self.shoulder_angle = angle[0]
+                    if joint == "HeadYaw":
+                        self.head_angle = angle[0]
                     if joint == "HipPitch":
                         bound_min = self.HIP_PITCH_MIN
                         bound_max = self.HIP_PITCH_MAX
                     else:
                         bound_min = self.kinematic_chain[joint][0]
                         bound_max = self.kinematic_chain[joint][1]
-                    angle = [self.joint_states.position[index_joints]]
-
-                    if joint == "RShoulderPitch":
-                        self.shoulder_angle = angle[0]
-                    if joint == "HeadYaw":
-                        self.head_angle = angle[0]
-                    self.angles.append(
-                        self.joint_states.position[index_joints])
                     norm_angle = self.normalize_with_bounds(
-                                     angle,
-                                     -1,
-                                     1,
-                                     bound_min,
-                                     bound_max)
+                        angle,
+                        self.NORMALIZATION_MIN,
+                        self.NORMALIZATION_MAX,
+                        bound_min,
+                        bound_max)
                     norm_angles.extend(norm_angle)
                     name_angles.extend([joint])
 
@@ -410,7 +407,7 @@ class HandGesture:
 
         obs = [e for e in norm_hand_pos] +\
               [e for e in norm_angles] +\
-              [e for e in norm_target]+\
+              [e for e in norm_target] +\
               [e for e in head_target_unit_vec] +\
               [e for e in head_unit_vec]
 
@@ -425,35 +422,35 @@ class HandGesture:
             joint_angles
         """
 
-        angles = []
-        speeds = []
-        speed = []
+        angles = 0
+        speed = 0
         i = 0
         # Adjust the speed of the joints
         for action in self.action:
+            angles = action * self.JOINTS_ANGLE
             if action > 0:
                 speed = action * self.JOINTS_SPEED
-                angles = action * self.JOINTS_ANGLE
             elif action < 0:
                 speed = action * - self.JOINTS_SPEED
-                angles = action * self.JOINTS_ANGLE
             else:
-                angles = 0
-                speed = 0
+                speed = 0.1
             # Limit the angle of the HipPitch joint
             if self.joint_names[i] == "HipPitch":
-                speed = self.HIP_SPEED
-                angles = self.HIP_ANGLE
+                speed = speed * self.HIP_SPEED
+                angles = angles * self.HIP_ANGLE
+                '# Back tilt not allowed'
                 if angles > 0:
                     angles = 0
                 # Angles out of limits
-                if(self.angles[i] < -0.35 or self.angles[i] > 0.03):
+                # force them to be in
+                if (self.angles[i] < self.HIP_PITCH_MIN
+                   or self.angles[i] > self.HIP_PITCH_MAX):
                     angles = angles * -1
             # Limit the angles of the Head joints
             elif (self.joint_names[i] == "HeadYaw" or
-                self.joint_names[i] == "HeadPitch"):
-                speed = self.HEAD_SPEED
-                angles = self.HEAD_ANGLE
+                  self.joint_names[i] == "HeadPitch"):
+                speed = speed * self.HEAD_SPEED
+                angles = angles * self.HEAD_ANGLE
 
             self.joint_angles.joint_names = [self.joint_names[i]]
             self.joint_angles.joint_angles = [angles]
@@ -474,23 +471,28 @@ class HandGesture:
             target[0] = self.target_local_position.pose.position.x
             target[1] = self.target_local_position.pose.position.y
             target[2] = self.target_local_position.pose.position.z
-            if ((target[0] > 0.25 and target[0] < 0.9) and
-                (target[1] > -0.75 and target[1] < -0.1) and
-                (target[2] > 0.6 and target[2] < 1.5)):
-                 self.action, _states = self.model.predict(obs)
-                 self.set_angles()
-                 if self.gesture_started == False:
-                     self.active_time = rospy.Time.now()
-                     self.gesture_started = True
+            if (target[0] > self.TARGET_MIN_X
+               and target[0] < self.TARGET_MAX_X
+               and target[1] > self.TARGET_MIN_Y
+               and target[1] < self.TARGET_MAX_Y
+               and target[2] > self.TARGET_MIN_Z
+               and target[2] < self.TARGET_MAX_Z):
+                self.action, _states = self.model.predict(obs)
+                self.set_angles()
+                if self.gesture_started is False:
+                    self.active_time = rospy.Time.now()
+                    self.gesture_started = True
             time_now = rospy.Time.now()
-            if float(time_now.secs) - (self.active_time.secs) > 7:
-                if (self.shoulder_angle < 0.7 or
-                    self.head_angle < -0.1):
+            time_difference = float(time_now.secs) - self.active_time.secs
+            if time_difference > self.GESTURE_TIME:
+                if (self.shoulder_angle < self.RESET_POSITION_SHOULDER
+                   or self.head_angle < self.RESET_POSITION_HEAD):
                     self.set_initial_pose()
                     print("setting initial position")
                     rospy.sleep(1.0)
                 else:
                     self.resetGesture()
+
 
 if __name__ == '__main__':
     handGesture = HandGesture()
