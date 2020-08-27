@@ -195,7 +195,7 @@ class HandGesture:
             self.set_head_pose()
             rospy.sleep(1.5)
             if self.active is False:
-                print("Gesture Module ON")
+                rospy.loginfo("Gesture Module ON")
                 self.active = True
                 self.active_time = rospy.Time.now()
                 self.active_pose = True
@@ -219,7 +219,7 @@ class HandGesture:
         self.target_local_position.pose.position.z = 0
         self.pub_init_targets.publish(True)
         self.set_initial_pose()
-        print("Gesture module OFF")
+        rospy.loginfo("Gesture Module OFF")
 
     def load_model(self):
         """
@@ -317,7 +317,6 @@ class HandGesture:
             self.target_local_position.pose.position.x,
             self.target_local_position.pose.position.y,
             self.target_local_position.pose.position.z])
-        # print(target)
 
         # Get position of the hand  of Pepper  in the local frame
         hand_pos = np.array([
@@ -488,7 +487,7 @@ class HandGesture:
                 if (self.shoulder_angle < self.RESET_POSITION_SHOULDER
                    or self.head_angle < self.RESET_POSITION_HEAD):
                     self.set_initial_pose()
-                    print("setting initial position")
+                    rospy.loginfo("Trying to reach initial position")
                     rospy.sleep(1.0)
                 else:
                     self.resetGesture()
