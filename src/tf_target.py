@@ -22,20 +22,12 @@
 
 import os
 import sys
-
-CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
-if CV2_ROS in sys.path:
-    sys.path.remove(CV2_ROS)
-    sys.path.append(CV2_ROS)
-
 import rospy
 import argparse
-
 import tf
 import tf2_ros
 import tf2_msgs.msg
 import geometry_msgs.msg
-import time
 
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool
@@ -51,23 +43,23 @@ class tfTarget:
         """
         self.init_targets()
 
-        publisher_gesture = rospy.init_node(
+        rospy.init_node(
             "tf_target",
             anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
 
-        subscriber_init_targets = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/init_targets",
             Bool,
             self.callback_init_targets)
 
-        subscriber_target = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_detection/target_camera",
             PoseStamped,
             self.callback_target_camera)
 
-        subscriber_target = rospy.Subscriber(
+        rospy.Subscriber(
             "hand_gesture/target_local_position",
             PoseStamped,
             self.callback_target_position)
@@ -157,8 +149,6 @@ class tfTarget:
         t.transform.rotation.w = 1
 
         tfm = tf2_msgs.msg.TFMessage([t])
-        if frame_child == "target_position":
-           print(tfm)
         self.pub_tf.publish(tfm)
 
     def start(self):
