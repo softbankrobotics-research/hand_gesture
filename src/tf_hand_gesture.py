@@ -22,19 +22,10 @@
 
 import os
 import sys
-
-CV2_ROS = '/opt/ros/kinetic/lib/python2.7/dist-packages'
-if CV2_ROS in sys.path:
-    sys.path.remove(CV2_ROS)
-    sys.path.append(CV2_ROS)
-
 import rospy
 import argparse
-
 import tf
 import geometry_msgs.msg
-import time
-
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool
 
@@ -44,13 +35,20 @@ class tfHandGesture:
     Class for transforming the frames of the hand, head and target
     to a local reference (odom) in order to perform the hand gesture
     """
+    TARGET_MIN_X = 0.30  # in meters
+    TARGET_MAX_X = 0.80  # in meters
+    TARGET_MIN_Y = -0.70  # in meters
+    TARGET_MAX_Y = -0.10  # in meters
+    TARGET_MIN_Z = 0.6  # in meters
+    TARGET_MAX_Z = 1.4  # in meters
+
     def __init__(self):
         """
         Constructor
         """
         self.activate_target = False
 
-        publisher_gesture = rospy.init_node(
+        rospy.init_node(
             "tf_hand_gesture",
             anonymous=True,
             disable_signals=False,
@@ -75,7 +73,6 @@ class tfHandGesture:
             "hand_gesture/head_local_position",
             PoseStamped,
             queue_size=1)
-
 
         self.listener1 = tf.TransformListener()
 
@@ -102,9 +99,12 @@ class tfHandGesture:
                 rospy.Time())
 
             # Publish the target_local_position
-            if ((target[0] > 0.25 and target[0] < 0.9) and
-                (target[1] > -0.75 and target[1] < -0.1) and
-                (target[2] > 0.6 and target[2] < 1.5)):
+            if (target[0] > self.TARGET_MIN_X
+               and target[0] < self.TARGET_MAX_X
+               and target[1] > self.TARGET_MIN_Y
+               and target[1] < self.TARGET_MAX_Y
+               and target[2] > self.TARGET_MIN_Z
+               and target[2] < self.TARGET_MAX_Z):
                 target_local_position = PoseStamped()
                 # target_local_position.header.frame_id = 'target_position'
                 target_local_position.header.stamp = rospy.Time.now()
