@@ -293,8 +293,8 @@ class HandGesture:
 
     def set_head_pose(self):
         """
-        Set the head pose of the robot to gaze down right to start detecting the
-        hand of the person
+        Set the head pose of the robot to gaze down right to start
+        detecting the hand of the person
 
         Publisher Topic:
             joint_angles
@@ -310,7 +310,7 @@ class HandGesture:
                               bound_low, bound_high):
         """
         Normalizes values (list) according to a specific range
-        
+
         Parameters:
             values  the values to be normalized
             range_min  the minimum value of the normalization
