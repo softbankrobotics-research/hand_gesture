@@ -48,17 +48,14 @@ class tfHandGesture:
         """
         self.activate_target = False
 
+        # Initialize node
         rospy.init_node(
             "tf_hand_gesture",
             anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
 
-        self.pub_activate_gesture = rospy.Publisher(
-            "hand_gesture/active",
-            Bool,
-            queue_size=1)
-
+        # Publishers
         self.pub_target = rospy.Publisher(
             "hand_gesture/target_local_position",
             PoseStamped,
@@ -74,16 +71,8 @@ class tfHandGesture:
             PoseStamped,
             queue_size=1)
 
-        self.listener1 = tf.TransformListener()
-
-    def callback_activate_target(self, data):
-        """
-        Activates or deactivates the gesture motion
-        """
-        if data.data is True:
-            self.activate_target = True
-        else:
-            self.activate_target = False
+        # TF transform listener
+        self.transform_listener = tf.TransformListener()
 
     def start(self):
         """
@@ -93,7 +82,7 @@ class tfHandGesture:
 
         # Transform the target frame to local reference
         try:
-            (target, _) = self.listener1.lookupTransform(
+            (target, _) = self.transform_listener.lookupTransform(
                 "base_link",
                 "target_position",
                 rospy.Time())
@@ -120,7 +109,7 @@ class tfHandGesture:
 
         # Transform the hand frame to local reference
         try:
-            (hand, _) = self.listener1.lookupTransform(
+            (hand, _) = self.transform_listener.lookupTransform(
                 "base_link",
                 "r_gripper",
                 rospy.Time())
@@ -142,14 +131,14 @@ class tfHandGesture:
 
         # Transform the head frame to local reference
         try:
-            (head, head_rot) = self.listener1.lookupTransform(
+            (head, head_rot) = self.transform_listener.lookupTransform(
                 "base_link",
                 "RealSense_frame",
                 rospy.Time())
 
             # Publish the head_local_position
             head_local_position = PoseStamped()
-            # head_local_position.header.frame_id = 'hand_local_position'
+            # head_local_position.header.frame_id = 'head_local_position'
             head_local_position.header.stamp = rospy.Time.now()
 
             head_local_position.pose.position.x = head[0]
