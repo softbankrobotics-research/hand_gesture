@@ -43,12 +43,14 @@ class tfTarget:
         """
         self.init_targets()
 
+        # Initialize node
         rospy.init_node(
             "tf_target",
             anonymous=True,
             disable_signals=False,
             log_level=rospy.INFO)
 
+        # Subscribers
         rospy.Subscriber(
             "hand_gesture/init_targets",
             Bool,
@@ -64,6 +66,7 @@ class tfTarget:
             PoseStamped,
             self.callback_target_position)
 
+        # Publisher
         self.pub_tf = rospy.Publisher(
             "/tf",
             tf2_msgs.msg.TFMessage,
@@ -72,6 +75,10 @@ class tfTarget:
         self.tf_listener = tf.TransformListener()
 
     def init_targets(self):
+        """
+        Initialize the position of the target camera
+        and the target position
+        """
         self.target_camera = PoseStamped()
         self.target_camera.pose.position.x = 1
         self.target_camera.pose.position.y = 0
@@ -90,9 +97,13 @@ class tfTarget:
         self.target_position.pose.orientation.z = 0
         self.target_position.pose.orientation.w = 1
 
-    def callback_init_targets(self, target_position):
+    def callback_init_targets(self, active):
         """
-        Get the target position PointStamped message
+        Initialize the targets and publish the frame of
+        the target position
+
+        Parameters:
+            active  a Boolean value to initialize the targets
         """
         self.init_targets()
         self.publish_frame(
@@ -102,13 +113,21 @@ class tfTarget:
 
     def callback_target_position(self, target_position):
         """
-        Get the target position PointStamped message
+        Update the target position
+
+        Parameters:
+            target_position the position of the target
+            of type geometry_msgs/PointStamped
         """
         self.target_position = target_position
 
     def callback_target_camera(self, target_camera):
         """
-        Get the target from the camera PoV PointStamped message
+        Update the target from the camera PoV
+
+        Parameters:
+            target_camera the target from the point of view
+            of the camera of type geometry_msgs/PointStamped
         """
         self.target_camera = target_camera
         # Transform the target frame to local reference
@@ -132,6 +151,14 @@ class tfTarget:
         """
         Get the position and orientation of a frame specified as frame_child
         with respect to other frame specified as frame_head
+
+        Parameters:
+            frame_head  the ros frame reference
+            frame_child  the ros frame to update
+            frame  the values to assign to the frame_child
+
+        Publisher Topic:
+            /tf
         """
         t = geometry_msgs.msg.TransformStamped()
         t.header.frame_id = frame_head
