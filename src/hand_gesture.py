@@ -65,8 +65,8 @@ class HandGesture:
     TARGET_MAX_Z = 1.4  # in meters
     RESET_POSITION_HEAD = -0.1  # in rads
     RESET_POSITION_SHOULDER = 0.7  # in rads
-    NORMALIZATION_MIN = -1
-    NORMALIZATION_MAX = 1
+    NORMALIZATION_MIN = -1  # Lower limit
+    NORMALIZATION_MAX = 1  # Upper limit
 
     def __init__(self):
         """
@@ -157,61 +157,73 @@ class HandGesture:
             Bool,
             self.callback_active)
 
-        rospy.Subscriber(
-            "hand_gesture/shutdown",
-            Bool,
-            self.callback_shutdown)
-
     def callback_joint_states(self, joint_states):
         """
-        Get the angles of the joints of the robot
+        Update the angles of the joints of the robot
+        Parameters:
+            joint_states type sensor_msgs/JointState
+        Subscriber Topic:
+            joint_states
         """
         self.joint_states = joint_states
 
     def callback_target(self, target_local_position):
         """
-        Get the position of the target in the world reference
+        Update the position of the target in the world reference
+
+        Parameters:
+            target_local_position type geometry_msgs/PoseStamped
+        Subscriber Topic:
+            hand_gesture/target_local_position
         """
         self.target_local_position = target_local_position
 
     def callback_hand(self, hand_local_position):
         """
-        Get the position of the hand of the robot in the world reference
+        Update the position of the hand of the robot in the world reference
+
+        Parameters:
+            hand_local_position type geometry_msgs/PoseStamped
+        Subscriber Topic:
+           hand_gesture/hand_local_position
         """
         self.hand_local_position = hand_local_position
 
     def callback_head(self, head_local_position):
         """
-        Get the position of the head of the robot in the world references
+        Update the position of the head of the robot in the world references
+
+        Parameters:
+            head_local_position type geometry_msgs/PoseStamped
+        Subscriber Topic:
+           hand_gesture/head_local_position
         """
         self.head_local_position = head_local_position
 
     def callback_active(self, active):
         """
         Activates or deactivates the gesture motion
+
+        Parameters:
+            active type std_msgs/Bool
+        Subscriber Topic:
+           hand_gesture/active
         """
         if active.data is True:
             self.resetGesture()
             self.set_head_pose()
-            rospy.sleep(1.5)
+            rospy.sleep(1.)
             if self.active is False:
                 rospy.loginfo("Gesture Module ON")
                 self.active = True
                 self.active_time = rospy.Time.now()
-                self.active_pose = True
         else:
             self.resetGesture()
 
-    def callback_shutdown(self, data):
-        """
-        Shutdown the node
-        """
-        print("Shutting down the gesture module")
-        if data.data is True:
-            print("Shutdown")
-            # do something
-
     def resetGesture(self):
+        """
+        Reset the gesture to its initial state
+        """
         self.active = False
         self.gesture_started = False
         self.target_local_position.pose.position.x = 1
@@ -230,6 +242,9 @@ class HandGesture:
     def set_initial_pose(self):
         """
         Set the position of the robot to the standart initial position
+
+        Publisher Topic:
+            joint_angles
         """
         body_joint_names = [
             "HeadPitch",
@@ -280,6 +295,9 @@ class HandGesture:
         """
         Set the head pose of the robot to gaze down right to start detecting the
         hand of the person
+
+        Publisher Topic:
+            joint_angles
         """
         joint_angles = JointAnglesWithSpeed()
         joint_angles.joint_names = ["HeadYaw", "HeadPitch"]
@@ -289,13 +307,23 @@ class HandGesture:
         self.pub_joints.publish(joint_angles)
 
     def normalize_with_bounds(self, values, range_min, range_max,
-                              bound_min, bound_max):
+                              bound_low, bound_high):
         """
         Normalizes values (list) according to a specific range
+        
+        Parameters:
+            values  the values to be normalized
+            range_min  the minimum value of the normalization
+            range_max  the maximum value of the normalization
+            bound_low  the low bound of the values to be normalized
+            bound_high  the high bound of the values to be normalized
+        return values_scaled - a list contanining values between
+            range_min and range_max normalized from
+            bound_min and bound_max
         """
         if isinstance(values, float):
             values = [values]
-        values_std = [(x - bound_min) / (bound_max-bound_min)
+        values_std = [(x - bound_low) / (bound_high-bound_low)
                       for x in values]
         values_scaled = [x * (range_max - range_min) + range_min
                          for x in values_std]
@@ -303,14 +331,16 @@ class HandGesture:
 
     def get_observation(self):
         """
-        Get the observation state
+        Get the observation of the state
 
         Returns:
             obs - a list containing lists of normalized observations
-            [joint angles] +\
-            [norm hand - target] +\
-            [unit vec head to hand] +\
-            [unit vec head]
+            [[joint angles]  joint angles of the kinematic chain
+            [hand 3D pos]  3D position of the hand of the robot (r_gripper)
+            [target 3D pos]  3D position of the target (hand of the person)
+            [unit vec head to hand]  Orientation vector of the robot head
+                towards the target
+            [unit vec head]]  Orientation vector of the head of the robot
         """
         # Get position of the target position in the local reference
         target = np.array([
@@ -318,14 +348,14 @@ class HandGesture:
             self.target_local_position.pose.position.y,
             self.target_local_position.pose.position.z])
 
-        # Get position of the hand  of Pepper  in the local frame
+        # Get position of the hand  of Pepper  in the local reference
         hand_pos = np.array([
             self.hand_local_position.pose.position.x,
             self.hand_local_position.pose.position.y,
             self.hand_local_position.pose.position.z])
 
         # Get position and orientation of the hand  of Pepper
-        # in the local frame
+        # in the local reference
         head_pos = np.array([
             self.head_local_position.pose.position.x,
             self.head_local_position.pose.position.y,
@@ -356,7 +386,7 @@ class HandGesture:
         orientations_norm = np.linalg.norm(
             np.array(head_target_unit_vec) - head_unit_vec)
 
-        # Fill and return the observation
+        # Normalize the position of the robot hand
         norm_hand_pos = self.normalize_with_bounds(
             hand_pos,
             self.NORMALIZATION_MIN,
@@ -364,6 +394,7 @@ class HandGesture:
             self.MODEL_TARGET_MIN,
             self.MODEL_TARGET_MAX)
 
+        # Normalize the position of the target
         norm_target = self.normalize_with_bounds(
             target,
             self.NORMALIZATION_MIN,
@@ -371,8 +402,8 @@ class HandGesture:
             self.MODEL_TARGET_MIN,
             self.MODEL_TARGET_MAX)
 
+        # Normalize the angles of the joints in the kinematic chain
         norm_angles = list()
-        name_angles = list()
         index_joint = 0
         self.angles = []
         for joint in self.joint_names:
@@ -399,7 +430,6 @@ class HandGesture:
                         bound_min,
                         bound_max)
                     norm_angles.extend(norm_angle)
-                    name_angles.extend([joint])
 
                 index_joints = index_joints + 1
             index_joint = index_joint + 1
@@ -412,20 +442,23 @@ class HandGesture:
 
         return obs
 
-    def set_angles(self):
+    def set_angles(self, actions):
         """
         Set the speed and angle of the joints in relative position
         and send them to the naoqi driver
 
+        Parameters:
+            actions  the values returned by the pre-trained model
+                given as a list of float values
         Publisher topic:
-            joint_angles
+            /joint_angles
         """
 
         angles = 0
         speed = 0
         i = 0
         # Adjust the speed of the joints
-        for action in self.action:
+        for action in actions:
             angles = action * self.JOINTS_ANGLE
             if action > 0:
                 speed = action * self.JOINTS_SPEED
@@ -461,34 +494,43 @@ class HandGesture:
     def start(self):
         """
         Starts the gesture of the robot if it received True on the Active topic
-        Subscriber topic
-            "hand_gesture/active"
         """
+
+        # Get the observations
         obs = self.get_observation()
+
+        # Get the position of the target if the gesture is active
         if self.active:
             target = np.zeros(3)
             target[0] = self.target_local_position.pose.position.x
             target[1] = self.target_local_position.pose.position.y
             target[2] = self.target_local_position.pose.position.z
+            # Get the actions predicted with the model and set the angles
+            # if the target is inside the bounds
             if (target[0] > self.TARGET_MIN_X
                and target[0] < self.TARGET_MAX_X
                and target[1] > self.TARGET_MIN_Y
                and target[1] < self.TARGET_MAX_Y
                and target[2] > self.TARGET_MIN_Z
                and target[2] < self.TARGET_MAX_Z):
-                self.action, _states = self.model.predict(obs)
-                self.set_angles()
+                actions, _states = self.model.predict(obs)
+                self.set_angles(actions)
+                # Re-initialize the time to perform the gesture
                 if self.gesture_started is False:
                     self.active_time = rospy.Time.now()
                     self.gesture_started = True
             time_now = rospy.Time.now()
             time_difference = float(time_now.secs) - self.active_time.secs
+            # Check if the time surpass the limit
             if time_difference > self.GESTURE_TIME:
+                # Set the initial pose if the shoulder or the head angles
+                # surpass default limits
                 if (self.shoulder_angle < self.RESET_POSITION_SHOULDER
                    or self.head_angle < self.RESET_POSITION_HEAD):
                     self.set_initial_pose()
                     rospy.loginfo("Trying to reach initial position")
                     rospy.sleep(1.0)
+                # Reset the gesture
                 else:
                     self.resetGesture()
 
