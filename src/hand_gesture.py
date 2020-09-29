@@ -468,14 +468,6 @@ class HandGesture:
         for action in actions:
             angles = action * self.JOINTS_ANGLE
             speed = abs(action)
-            """
-            if action > 0:
-                speed = action  # * self.JOINTS_SPEED
-            elif action < 0:
-                speed = - action  # * - self.JOINTS_SPEED
-            else:
-                speed = 0
-            """
             # Limit the angle of the HipPitch joint
             if self.joint_names[i] == "HipPitch":
                 speed = speed * self.HIP_SPEED
