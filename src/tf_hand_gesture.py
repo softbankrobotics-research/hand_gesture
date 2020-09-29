@@ -36,7 +36,7 @@ class tfHandGesture:
     to a local reference (odom) in order to perform the hand gesture
     """
     TARGET_MIN_X = 0.30  # in meters
-    TARGET_MAX_X = 0.80  # in meters
+    TARGET_MAX_X = 0.70  # in meters
     TARGET_MIN_Y = -0.70  # in meters
     TARGET_MAX_Y = -0.10  # in meters
     TARGET_MIN_Z = 0.6  # in meters
