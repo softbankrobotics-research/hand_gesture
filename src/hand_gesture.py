@@ -46,7 +46,8 @@ class HandGesture:
     """
     Class for performing the hand gesture
     """
-    GESTURE_TIME = 7  # in seconds
+    DETERMINISTIC = True
+    GESTURE_TIME = 20  # in seconds
     HIP_PITCH_MAX = 0.05  # in rads
     HIP_PITCH_MIN = -0.4  # in rads
     MODEL_TARGET_MAX = 1.5  # in meters
@@ -54,11 +55,11 @@ class HandGesture:
     JOINTS_SPEED = 0.1  # % of maximum speed
     HEAD_SPEED = 0.5  # % of joints speed
     HIP_SPEED = 0.5  # % of joints speed
-    JOINTS_ANGLE = 0.2  # rads
+    JOINTS_ANGLE = 0.04  # rads
     HEAD_ANGLE = 0.5  # % of the joints angles
     HIP_ANGLE = 0.5  # % of the joints angles
     TARGET_MIN_X = 0.30  # in meters
-    TARGET_MAX_X = 0.80  # in meters
+    TARGET_MAX_X = 0.70  # in meters
     TARGET_MIN_Y = -0.70  # in meters
     TARGET_MAX_Y = -0.10  # in meters
     TARGET_MIN_Z = 0.6  # in meters
@@ -67,6 +68,7 @@ class HandGesture:
     RESET_POSITION_SHOULDER = 0.7  # in rads
     NORMALIZATION_MIN = -1  # Lower limit
     NORMALIZATION_MAX = 1  # Upper limit
+    TARGET_THRESHOLD = 0.06
 
     def __init__(self):
         """
@@ -98,6 +100,8 @@ class HandGesture:
         self.active_time = rospy.Time.now()
         self.shoulder_angle = 0
         self.head_angle = 0
+        self.hands_norm = 0
+        self.hands_close = False
 
         # Limits for the joint angles
         self.kinematic_chain = {
@@ -225,6 +229,8 @@ class HandGesture:
         Reset the gesture to its initial state
         """
         self.active = False
+        self.hands_norm = 0
+        self.hands_close = False
         self.gesture_started = False
         self.target_local_position.pose.position.x = 1
         self.target_local_position.pose.position.y = 0
@@ -368,6 +374,7 @@ class HandGesture:
             self.head_local_position.pose.orientation.w])
 
         hands_norm = np.linalg.norm(hand_pos - target)
+        self.hands_norm = hands_norm
 
         # Get information about the head direction and hand
         # Head to Hand reward based on the direction of the head to the hand
@@ -434,8 +441,8 @@ class HandGesture:
                 index_joints = index_joints + 1
             index_joint = index_joint + 1
 
-        obs = [e for e in norm_hand_pos] +\
-              [e for e in norm_angles] +\
+        obs = [e for e in norm_angles] +\
+              [e for e in norm_hand_pos] +\
               [e for e in norm_target] +\
               [e for e in head_target_unit_vec] +\
               [e for e in head_unit_vec]
@@ -460,12 +467,15 @@ class HandGesture:
         # Adjust the speed of the joints
         for action in actions:
             angles = action * self.JOINTS_ANGLE
+            speed = abs(action)
+            """
             if action > 0:
-                speed = action * self.JOINTS_SPEED
+                speed = action  # * self.JOINTS_SPEED
             elif action < 0:
-                speed = action * - self.JOINTS_SPEED
+                speed = - action  # * - self.JOINTS_SPEED
             else:
-                speed = 0.1
+                speed = 0
+            """
             # Limit the angle of the HipPitch joint
             if self.joint_names[i] == "HipPitch":
                 speed = speed * self.HIP_SPEED
@@ -501,28 +511,38 @@ class HandGesture:
 
         # Get the position of the target if the gesture is active
         if self.active:
-            target = np.zeros(3)
-            target[0] = self.target_local_position.pose.position.x
-            target[1] = self.target_local_position.pose.position.y
-            target[2] = self.target_local_position.pose.position.z
-            # Get the actions predicted with the model and set the angles
-            # if the target is inside the bounds
-            if (target[0] > self.TARGET_MIN_X
-               and target[0] < self.TARGET_MAX_X
-               and target[1] > self.TARGET_MIN_Y
-               and target[1] < self.TARGET_MAX_Y
-               and target[2] > self.TARGET_MIN_Z
-               and target[2] < self.TARGET_MAX_Z):
-                actions, _states = self.model.predict(obs)
-                self.set_angles(actions)
-                # Re-initialize the time to perform the gesture
-                if self.gesture_started is False:
-                    self.active_time = rospy.Time.now()
-                    self.gesture_started = True
             time_now = rospy.Time.now()
             time_difference = float(time_now.secs) - self.active_time.secs
-            # Check if the time surpass the limit
-            if time_difference > self.GESTURE_TIME:
+
+            # Check if the hand is close enough to the target
+            # or if the time surpass the limit
+            if ((self.hands_norm < self.TARGET_THRESHOLD)
+               or time_difference > self.GESTURE_TIME):
+                # if time_difference > self.GESTURE_TIME:
+                self.hands_close = True
+
+            if self.hands_close is False:
+                target = np.zeros(3)
+                target[0] = self.target_local_position.pose.position.x
+                target[1] = self.target_local_position.pose.position.y
+                target[2] = self.target_local_position.pose.position.z
+                # Get the actions predicted with the model and set the angles
+                # if the target is inside the bounds
+                if (target[0] > self.TARGET_MIN_X
+                   and target[0] < self.TARGET_MAX_X
+                   and target[1] > self.TARGET_MIN_Y
+                   and target[1] < self.TARGET_MAX_Y
+                   and target[2] > self.TARGET_MIN_Z
+                   and target[2] < self.TARGET_MAX_Z):
+                    actions, _states = self.model.predict(
+                        obs,
+                        deterministic=self.DETERMINISTIC)
+                    self.set_angles(actions)
+                    # Re-initialize the time to perform the gesture
+                    if self.gesture_started is False:
+                        self.active_time = rospy.Time.now()
+                        self.gesture_started = True
+            else:
                 # Set the initial pose if the shoulder or the head angles
                 # surpass default limits
                 if (self.shoulder_angle < self.RESET_POSITION_SHOULDER
@@ -535,12 +555,17 @@ class HandGesture:
                     self.resetGesture()
 
 
+
 if __name__ == '__main__':
     handGesture = HandGesture()
     try:
         rate = rospy.Rate(50.0)
         while not rospy.is_shutdown():
+            time_before = rospy.Time.now()
             handGesture.start()
+            time_after = rospy.Time.now()
+            time_difference = (time_after.nsecs - time_before.nsecs)/100000
+            # print(time_difference)
             rate.sleep()
     except KeyboardInterrupt:
         pass
