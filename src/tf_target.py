@@ -22,6 +22,7 @@
 
 import os
 import sys
+import threading
 import rospy
 import argparse
 import tf
@@ -105,11 +106,14 @@ class tfTarget:
         Parameters:
             active  a Boolean value to initialize the targets
         """
+        mutex = threading.Lock()
+        mutex.acquire()
         self.init_targets()
         self.publish_frame(
             "base_link",
             "target_position",
             self.target_position)
+        mutex.release()
 
     def callback_target_position(self, target_position):
         """
