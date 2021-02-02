@@ -1,4 +1,4 @@
-# ros_hand_target
+# hand gesture
 Ros Module for a Target reaching behavior with the Pepper robot
 
 ## Installation
